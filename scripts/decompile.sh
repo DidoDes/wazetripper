@@ -5,6 +5,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 require_image
+require_supported_version
 require_apk
 
 mkdir -p "$BUILD_DIR"

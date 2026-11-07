@@ -10,6 +10,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 require_image
+require_supported_version
 require_apk
 cd "$REPO_ROOT"
 
@@ -17,6 +18,9 @@ if [ ! -d "$DECOMP_DIR" ]; then
     echo "build/base_apktool missing — run scripts/decompile.sh && scripts/patch.sh first" >&2
     exit 1
 fi
+
+# 0a. Trava: apk/ tem que ser o Waze genuino (certificado da Waze + versao) antes de virar pristine/splits.
+verify_waze_apks
 
 # 0. Trava do build: o layout dos pacotes do Tripper tem que passar no teste sem hardware.
 "$SCRIPT_DIR/framecheck.sh"

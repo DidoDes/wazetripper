@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # the constants below are used by the scripts that source this file
 # Shared config + Docker helpers for every script in this repo. (Derivado do wazeology, Apache-2.0; ver NOTICE.md)
 # Host rule: NO tool ever runs on the host. Everything goes through run_tools() (the toolchain image).
 set -euo pipefail
@@ -13,8 +14,16 @@ KEYSTORE="$BUILD_DIR/debug.keystore"
 
 # --- pinned versions (reproducibility) ------------------------------------------------------
 WAZE_PACKAGE="com.waze"
-WAZE_VERSION="${WAZE_VERSION:-5.23.0.2}"      # pinned default; overridable via .env
-WAZE_VERSION_CODE="1030725"
+# The smali hooks (patches/) and the reflection in NavHooks only fit this exact Waze release.
+SUPPORTED_WAZE_VERSION="5.23.0.2"
+SUPPORTED_WAZE_VERSION_CODE="1030725"
+WAZE_VERSION="${WAZE_VERSION:-$SUPPORTED_WAZE_VERSION}"
+WAZE_VERSION_CODE="${WAZE_VERSION_CODE:-$SUPPORTED_WAZE_VERSION_CODE}"
+# SHA-256 of Waze's APK signing certificate (CN=Alex Agranovich, OU=Waze), the key every official
+# com.waze release is signed with. Base and splits must all carry it, whatever the download source.
+WAZE_CERT_SHA256="03637f6c5d8f604e6fdb79a6ffbfa578de4e318f8da22fc6106665247f8807d7"
+# Optional extra pin: the exact SHA-256 of apk/base.apk (printed by every verification run).
+WAZE_BASE_SHA256="${WAZE_BASE_SHA256:-}"
 APK_SOURCE="${APK_SOURCE:-apk-pure}"          # apk-pure (default) | google-play
 LANGS="${LANGS:-all}"                         # languages to bundle: "all" (default) or e.g. "pt en"
 IMAGE="waze-tools:latest"
@@ -71,3 +80,29 @@ ensure_keystore() {
 }
 
 log() { echo ">> $*"; }
+
+# Stop early when WAZE_VERSION asks for a release the patches were not written for: the patcher
+# would fail on a missing method, or worse, the build would succeed and the hooks silently vanish.
+# Porting to a new release? Set WAZETRIPPER_ALLOW_UNSUPPORTED=1 (and WAZE_VERSION_CODE) on purpose.
+require_supported_version() {
+    if [ "$WAZE_VERSION" != "$SUPPORTED_WAZE_VERSION" ] && [ -z "${WAZETRIPPER_ALLOW_UNSUPPORTED:-}" ]; then
+        echo "WAZE_VERSION=$WAZE_VERSION is not supported: the patches only fit Waze $SUPPORTED_WAZE_VERSION." >&2
+        echo "Remove WAZE_VERSION from .env, or set WAZETRIPPER_ALLOW_UNSUPPORTED=1 if you are porting the hooks." >&2
+        exit 1
+    fi
+}
+
+# GATE: prove apk/ holds genuine Waze before anything is decompiled, patched or installed.
+#  - base.apk and every split_*.apk verify with apksigner and are signed ONLY by Waze's certificate
+#    (a mirror cannot forge that signature, so a tampered or repackaged download is rejected);
+#  - base.apk is package com.waze at WAZE_VERSION / WAZE_VERSION_CODE;
+#  - optionally, base.apk matches WAZE_BASE_SHA256 byte for byte.
+verify_waze_apks() {
+    require_apk
+    log "verifying apk/ is genuine Waze ${WAZE_VERSION} (signing certificate + version)"
+    run_tools env \
+        WAZE_CERT_SHA256="$WAZE_CERT_SHA256" WAZE_PACKAGE="$WAZE_PACKAGE" \
+        WAZE_VERSION="$WAZE_VERSION" WAZE_VERSION_CODE="$WAZE_VERSION_CODE" \
+        WAZE_BASE_SHA256="$WAZE_BASE_SHA256" \
+        bash scripts/verify_waze_apks.sh
+}
