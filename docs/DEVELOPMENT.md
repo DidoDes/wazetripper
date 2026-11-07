@@ -46,7 +46,14 @@ Waze first.
 Downloads the pinned Waze version (`WAZE_VERSION`, default `5.23.0.2`) with [apkeep](https://github.com/EFForg/apkeep)
 inside the container — from APKPure by default, or Google Play with an account (`APK_SOURCE`, see `.env.example`) —
 and `normalize_apks.py` turns whatever came back (XAPK/APKM) into `apk/base.apk` + `apk/split_config.*.apk`. The
-step is skipped when those files exist; `FORCE=1` re-downloads. **No APK is ever committed** (`.gitignore` blocks
+step is skipped when those files exist; `FORCE=1` re-downloads.
+
+The download is then verified by `scripts/verify_waze_apks.sh` (also a gate at the start of `build.sh`, so an `apk/`
+filled by hand is checked too): base and splits must pass `apksigner verify` and be signed **only** by Waze's
+certificate (`WAZE_CERT_SHA256` in `lib.sh`), and the base must be `com.waze` at `WAZE_VERSION`/`WAZE_VERSION_CODE`.
+A mirror cannot forge that signature, so this holds whatever `APK_SOURCE` is. Set `WAZE_BASE_SHA256` to also pin the
+exact file (each run prints its hash). A `WAZE_VERSION` other than `SUPPORTED_WAZE_VERSION` stops every step unless
+`WAZETRIPPER_ALLOW_UNSUPPORTED=1`, because the hooks only fit one release. **No APK is ever committed** (`.gitignore` blocks
 `*.apk`): it is Waze's app.
 
 ## 2. Decompile — `scripts/decompile.sh`
@@ -137,6 +144,8 @@ Install with `adb install ./wazetripper.apk` (uninstall the official Waze first 
   deterministic), the compass sectors, and that **every** maneuver type Waze 5.23.0.2 declares has a Tripper icon.
   `build.sh` runs it first, so a broken packet layout never reaches an APK. When you change a builder, update the
   expectation and keep its tag honest: a new layout starts as `LOCK` and becomes `REAL` once a capture proves it.
+- **CI — `.github/workflows/ci.yml`.** On every push and pull request: the packet checks, the package compiling against
+  android-34 (Java 8), `py_compile` on the Python scripts and ShellCheck at warning level. It never downloads Waze.
 - **`scripts/verify_merge.py`** (also a gate in `build.sh`): no pristine `res/*` file changed except what the graft
   patched intentionally, the only dropped entry is the obsolete split descriptor, the native libraries are stored
   uncompressed, and every dex survived.
