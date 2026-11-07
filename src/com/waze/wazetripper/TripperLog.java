@@ -227,6 +227,7 @@ final class TripperLog {
             recording = true;
             writeLine("=== WazeTripper: trajeto iniciado em " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date(now)) + " ===");
             writeLine(deviceLine());
+            writeLine(LEGEND);
             if (header != null) {
                 for (String h : header.split("\n")) writeLine(h);
             }
@@ -293,6 +294,11 @@ final class TripperLog {
         Arrays.sort(files, (a, b) -> a.getName().compareTo(b.getName()));
         return files;
     }
+
+    // Legenda em ingles: as mensagens sao em portugues, mas o prefixo de cada linha diz o assunto.
+    private static final String LEGEND = "Legend (EN): BLE = Bluetooth link to the Tripper | NAV = navigation data from Waze"
+            + " and packets sent | RADAR = speed cameras | ALERTA = Waze alerts | GEO = route points"
+            + " | HOOK-ERR = error inside a Waze hook (first one per hook, with stack trace)";
 
     private static String deviceLine() {
         return "App: WazeTripper v" + Version.NAME + " sobre Waze " + appVersion + " | Android " + Build.VERSION.RELEASE

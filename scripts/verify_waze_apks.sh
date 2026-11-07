@@ -11,7 +11,7 @@ WAZE_BASE_SHA256="${WAZE_BASE_SHA256:-}"
 
 fail() {
     echo "FATAL: $*" >&2
-    echo "Delete the apk/ folder and run scripts/fetch-apk.sh again (or try APK_SOURCE=google-play)." >&2
+    echo "Delete the apk/ folder and run scripts/all.sh again. If it happens again, open an issue." >&2
     exit 1
 }
 

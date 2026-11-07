@@ -14,6 +14,10 @@ Added
   release); `WAZETRIPPER_ALLOW_UNSUPPORTED=1` keeps the old behaviour for porting work.
 - The Docker image checks the SHA-256 of apktool and apkeep, like it already did for APKEditor.
 - GitHub Actions CI: packet checks, the Java package compiling against android-34, Python syntax and ShellCheck.
+- A line in the panel, under the Tripper's name, says whether Waze is sending navigation data: no active route, route
+  active but no data, receiving data, or an error inside the Waze integration (with the hook names). It refreshes every
+  2 seconds while the panel is open.
+- Trip logs start with a one-line English legend of the line prefixes (BLE, NAV, RADAR, ALERTA, GEO, HOOK-ERR).
 
 Changed
 - Automatic reconnection looks only for the paired Tripper's Bluetooth address instead of any `RE_DISP`, so it never
@@ -22,6 +26,12 @@ Changed
   hardware.
 - The keepalive measures idle time with the monotonic clock, so a phone clock change (network time sync, time zone)
   can no longer delay a keepalive past the Tripper's 5-second watchdog.
+
+Fixed
+- Errors inside the Waze hooks were swallowed silently, so a bug could stop the Tripper updating without a trace in the
+  trip log. The first error of each hook is now logged with its stack trace (`HOOK-ERR`) and counted; later ones are
+  only counted. This also stops a failing alerts decoder, which runs about once a second, from filling the trip log.
+  Waze itself is still never affected.
 
 ## 0.5.1 — 2026-09-20
 

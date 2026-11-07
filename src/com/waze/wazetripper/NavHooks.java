@@ -32,6 +32,59 @@ public final class NavHooks {
     private static int lastEtaSeconds = Integer.MIN_VALUE;
     private static String lastEtaMinutes;
     private static boolean avgCamActive;
+
+    // ---------- diagnostico (painel + log) ----------------------------------------------------
+    // Antes, toda excecao aqui era engolida em silencio: um bug em TripperNav fazia o Tripper parar
+    // de atualizar sem deixar rastro no log do trajeto. Agora a PRIMEIRA falha de cada hook vai pro
+    // log (com stack trace) e aparece no painel; as seguintes so' contam, pra nao inundar o log
+    // (onAlertsUpdate roda ~1x/s). Continua nunca propagando: a instrumentacao nao pode afetar o Waze.
+
+    private static final java.util.LinkedHashMap<String, Integer> failures = new java.util.LinkedHashMap<>();
+    private static volatile boolean navActive;
+    private static volatile long lastNavDataAt;   // SystemClock.elapsedRealtime() do ultimo callback de navegacao
+
+    private static void fail(String hook, Throwable t) {
+        try {
+            boolean first;
+            synchronized (failures) {
+                Integer n = failures.get(hook);
+                first = n == null;
+                failures.put(hook, first ? 1 : n + 1);
+            }
+            if (first) {
+                TripperLog.e(TAG, "HOOK-ERR " + hook + " falhou (so' a primeira falha de cada hook e' registrada)", t);
+            }
+        } catch (Throwable ignored) {
+            // nem o log pode derrubar o Waze
+        }
+    }
+
+    /** Marca que o Waze mandou dado de navegacao agora (os callbacks repetem mesmo sem mudanca). */
+    private static void alive() {
+        lastNavDataAt = android.os.SystemClock.elapsedRealtime();
+    }
+
+    /** Ha rota ativa segundo o Waze (onNavigationStateChanged). */
+    static boolean isNavigating() {
+        return navActive;
+    }
+
+    /** elapsedRealtime do ultimo dado de navegacao; 0 = nenhum desde que o Waze abriu. */
+    static long lastNavDataAt() {
+        return lastNavDataAt;
+    }
+
+    /** Hooks que ja falharam, com a contagem: "onAlertsUpdate x12, onNext x1". Vazio = nenhum. */
+    static String failureSummary() {
+        StringBuilder sb = new StringBuilder();
+        synchronized (failures) {
+            for (java.util.Map.Entry<String, Integer> e : failures.entrySet()) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(e.getKey()).append(" x").append(e.getValue());
+            }
+        }
+        return sb.toString();
+    }
     private static int lastZone = Integer.MIN_VALUE;
     private static int lastRadar = Integer.MIN_VALUE;
     private static String lastAlerts;
@@ -39,96 +92,114 @@ public final class NavHooks {
     /** onCurrentInstructionChanged: codigo cru + nome do Instruction$Type (a manobra da seta grande). */
     public static void onCurrent(int code, String name) {
         try {
+            alive();
             String v = name + " (" + code + ")";
             if (v.equals(lastCurrent)) return;
             lastCurrent = v;
             TripperLog.i(TAG, "NAV manobra atual: " + v);
             TripperNav.onCurrent(name);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onCurrent", t);
         }
     }
 
     /** onNextInstructionChanged: a proxima manobra (seta pequena, byte [7] do Pod). */
     public static void onNext(int code, String name) {
         try {
+            alive();
             String v = name + " (" + code + ")";
             if (v.equals(lastNext)) return;
             lastNext = v;
             TripperLog.i(TAG, "NAV proxima manobra: " + v);
             TripperNav.onNext(name);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onNext", t);
         }
     }
 
     /** onExitNumberChanged: ordinal da saida (rotatoria) da manobra atual. */
     public static void onExit(int exit) {
         try {
+            alive();
             if (exit == lastExit) return;
             lastExit = exit;
             TripperLog.i(TAG, "NAV saida atual: " + exit);
             TripperNav.onExit(exit);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onExit", t);
         }
     }
 
     /** onNextExitNumberChanged: ordinal da saida da proxima manobra. */
     public static void onNextExit(int exit) {
         try {
+            alive();
             if (exit == lastNextExit) return;
             lastNextExit = exit;
             TripperLog.i(TAG, "NAV proxima saida: " + exit);
             TripperNav.onNextExit(exit);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onNextExit", t);
         }
     }
 
     /** onCurrentInstructionDistanceChanged: distancia ate a manobra atual (metros + texto do Waze). */
     public static void onDistance(int meters, String text, String unit) {
         try {
+            alive();
             if (meters == lastDistance) return;
             lastDistance = meters;
             TripperLog.i(TAG, "NAV distancia ate a manobra: " + meters + " m (\"" + text + " " + unit + "\")");
             TripperNav.onDistance(meters);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onDistance", t);
         }
     }
 
     /** onEtaDistanceChanged: distancia total restante ate o destino (metros). */
     public static void onEtaDistance(int meters) {
         try {
+            alive();
             if (meters == lastEtaDistance) return;
             lastEtaDistance = meters;
             TripperLog.i(TAG, "NAV distancia total: " + meters + " m");
             TripperNav.onEtaDistance(meters);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onEtaDistance", t);
         }
     }
 
     /** onEtaMinutesChanged: (texto do ETA, unidade do texto, minutos restantes). */
     public static void onEtaMinutes(String time, String unit, int minutes) {
         try {
+            alive();
             String v = minutes + " min (\"" + time + " " + unit + "\")";
             if (v.equals(lastEtaMinutes)) return;
             lastEtaMinutes = v;
             TripperLog.i(TAG, "NAV tempo restante: " + v);
             TripperNav.onEtaMinutes(minutes);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onEtaMinutes", t);
         }
     }
 
     /** onCurrentEtaSecondsChanged: tempo restante em segundos (resolucao maior que o de minutos). */
     public static void onEtaSeconds(int seconds) {
         try {
+            alive();
             if (seconds == lastEtaSeconds) return;
             lastEtaSeconds = seconds;
             TripperLog.i(TAG, "NAV tempo restante (s): " + seconds);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onEtaSeconds", t);
         }
     }
 
     /** onNavigationStateChanged: navegando ou nao (o segundo argumento do Waze e' so' registrado). */
     public static void onNavState(boolean navigating, int arg) {
         try {
+            navActive = navigating;
+            if (navigating) alive();
             TripperLog.i(TAG, "NAV estado: navegando=" + navigating + " (arg=" + arg + ")");
             TripperNav.onNavState(navigating);
             if (!navigating) {
@@ -145,7 +216,8 @@ public final class NavHooks {
                 lastZone = Integer.MIN_VALUE;
                 lastAlerts = null;
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onNavState", t);
         }
     }
 
@@ -184,7 +256,7 @@ public final class NavHooks {
             }
             if (sb.length() > 0) TripperLog.i(TAG, "GEO " + chunk + " " + sb);
         } catch (Throwable t) {
-            TripperLog.e(TAG, "onRouteGeometry falhou", t);
+            fail("onRouteGeometry", t);
         }
     }
 
@@ -199,7 +271,8 @@ public final class NavHooks {
             }
             // Significado do inteiro ainda desconhecido: 0 ou negativo e' tratado como "sem zona".
             TripperNav.onEnforcementZone(value > 0);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onEnforcementZone", t);
         }
     }
 
@@ -208,7 +281,8 @@ public final class NavHooks {
             if (lastZone != Integer.MIN_VALUE) TripperLog.i(TAG, "RADAR fim da zona de fiscalizacao");
             lastZone = Integer.MIN_VALUE;
             TripperNav.onEnforcementZone(false);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onEnforcementZoneClear", t);
         }
     }
 
@@ -223,7 +297,7 @@ public final class NavHooks {
             TripperLog.i(TAG, "RADAR velocidade media: " + percent + "% do trecho, faltam " + left + " m, recomendada " + speed);
             TripperNav.onAvgSpeedCam(true, left);
         } catch (Throwable t) {
-            TripperLog.i(TAG, "RADAR velocidade media (nao decodificou): " + t);
+            fail("onAvgSpeedCam", t);
         }
     }
 
@@ -233,7 +307,8 @@ public final class NavHooks {
             avgCamActive = false;
             TripperLog.i(TAG, "RADAR fim da velocidade media");
             TripperNav.onAvgSpeedCam(false, -1);
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            fail("onAvgSpeedCamClear", t);
         }
     }
 
@@ -261,7 +336,7 @@ public final class NavHooks {
             TripperLog.i(TAG, "ALERTA " + event + ": id=" + c.getMethod("getUniqueId").invoke(id)
                     + " provedor=" + c.getMethod("getProviderId").invoke(id));
         } catch (Throwable t) {
-            TripperLog.i(TAG, "ALERTA " + event + ": " + (data == null ? 0 : data.length) + " bytes (nao decodificou: " + t + ")");
+            fail("onAlert-" + event, t);
         }
     }
 
@@ -309,7 +384,7 @@ public final class NavHooks {
                 TripperNav.onRadar(radarMeters);
             }
         } catch (Throwable t) {
-            TripperLog.i(TAG, "ALERTAS ativos (nao decodificou): " + t);
+            fail("onAlertsUpdate", t);
         }
     }
 
