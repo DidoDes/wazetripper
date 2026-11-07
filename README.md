@@ -99,10 +99,12 @@ opening Waze and it does not connect, turn the ignition off and on again with Wa
 |---|---|
 | `docker: command not found` or `Cannot connect to the Docker daemon` | Start Docker Desktop. On Windows, turn on Ubuntu under *Settings > Resources > WSL integration*. |
 | The Waze download fails | Run `bash scripts/all.sh` again. It skips what is already done. |
+| `is not signed by Waze's certificate` or `is not version 5.23.0.2` | The download is not the genuine Waze 5.23.0.2. Delete the `apk/` folder and run `bash scripts/all.sh` again; if it repeats, open an issue. Never install a build made from that file. |
 | `adb devices` shows nothing, or `unauthorized` | Check that USB debugging is on, that the cable is in *File transfer* mode, and accept the prompt on the phone. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` or "conflicts with an existing package" | Uninstall the official Waze first (step 3). |
 | `INSTALL_FAILED_INSUFFICIENT_STORAGE` | Free some space on the phone. |
 | The Tripper is not found | Turn the ignition off and on again with Waze open. |
+| Connected, but the Tripper shows nothing during a route | Open the panel and read the line under the Tripper's name. Green: Waze is sending navigation data. Orange: no data from Waze yet. Red: an error inside the Waze integration; export the trip log and open an issue. |
 
 Anything else: [open an issue](https://github.com/jnsdias/wazetripper/issues). Advanced settings (Waze version,
 download source, languages) are in `.env.example`; you do not need it for a normal build.

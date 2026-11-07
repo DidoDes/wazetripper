@@ -94,6 +94,15 @@ final class TripperPanel {
     private TextView chip;
     private TextView deviceName;
     private TextView deviceSub;
+    private TextView navHealth;
+    // Atualiza a linha de saude da navegacao a cada 2 s enquanto o painel esta aberto.
+    private final Runnable navHealthTick = new Runnable() {
+        @Override
+        public void run() {
+            renderNavHealth();
+            if (navHealth != null && dialog != null && dialog.isShowing()) navHealth.postDelayed(this, 2000);
+        }
+    };
     private LinearLayout stepsRow;
     private final View[] stepBars = new View[PAIRING_STEPS];
     private TextView stepLabel;
@@ -181,11 +190,13 @@ final class TripperPanel {
         bridge.setListener(listener);
         dialog.setOnDismissListener(d -> {
             bridge.setListener(null);
+            navHealth.removeCallbacks(navHealthTick);
         });
 
         renderSegments();
         render(bridge.getState());
         dialog.show();
+        navHealth.post(navHealthTick);
     }
 
     private View buildHeader() {
@@ -246,6 +257,10 @@ final class TripperPanel {
         deviceSub.setTextColor(MUTED);
         deviceSub.setTextSize(13f);
         card.addView(deviceSub);
+
+        navHealth = new TextView(activity);
+        navHealth.setTextSize(12f);
+        card.addView(navHealth, topMargin(6));
 
         stepsRow = new LinearLayout(activity);
         stepsRow.setOrientation(LinearLayout.VERTICAL);
@@ -767,6 +782,36 @@ final class TripperPanel {
         forgetLink.setVisibility(saved ? View.VISIBLE : View.GONE);
         renderSyncHint();
         renderTripLog();
+    }
+
+    /**
+     * Linha de saude: o Waze esta mandando dados de navegacao? Responde "e' o Tripper ou sao os
+     * hooks?" sem precisar exportar log. Erro em hook tem prioridade (vermelho).
+     */
+    private void renderNavHealth() {
+        if (navHealth == null) return;
+        String errors = NavHooks.failureSummary();
+        long last = NavHooks.lastNavDataAt();
+        long ago = last == 0 ? -1 : (android.os.SystemClock.elapsedRealtime() - last) / 1000;
+        String text;
+        int color;
+        if (!errors.isEmpty()) {
+            text = tr("Erro na integração com o Waze: ", "Waze integration error: ", "Error en la integración con Waze: ")
+                    + errors + tr(" · exporte o log do trajeto", " · export the trip log", " · exporta el registro del viaje");
+            color = DANGER;
+        } else if (!NavHooks.isNavigating()) {
+            text = tr("Navegação: sem rota ativa", "Navigation: no active route", "Navegación: sin ruta activa");
+            color = MUTED;
+        } else if (ago < 0 || ago > 30) {
+            text = tr("Rota ativa, mas o Waze não mandou dados", "Route active, but no data from Waze", "Ruta activa, pero Waze no envió datos")
+                    + (ago < 0 ? "" : tr(" há ", " for ", " hace ") + ago + " s");
+            color = WARN;
+        } else {
+            text = tr("Navegação: recebendo dados do Waze", "Navigation: receiving data from Waze", "Navegación: recibiendo datos de Waze");
+            color = OK;
+        }
+        navHealth.setText("● " + text);
+        navHealth.setTextColor(color);
     }
 
     private void renderSyncHint() {

@@ -101,10 +101,12 @@ conectou, desligue e ligue a ignição de novo com o Waze aberto.
 |---|---|
 | `docker: command not found` ou `Cannot connect to the Docker daemon` | Abra o Docker Desktop. No Windows, ative o Ubuntu em *Settings > Resources > WSL integration*. |
 | O download do Waze falha | Rode `bash scripts/all.sh` de novo. Ele pula o que já foi feito. |
+| `is not signed by Waze's certificate` ou `is not version 5.23.0.2` | O download não é o Waze 5.23.0.2 genuíno. Apague a pasta `apk/` e rode `bash scripts/all.sh` de novo; se repetir, abra uma issue. Nunca instale um build feito com esse arquivo. |
 | `adb devices` não mostra nada, ou mostra `unauthorized` | Confira se a depuração USB está ativa, se o cabo está em *Transferência de arquivos* e aceite o aviso no celular. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` ou "conflita com um pacote existente" | Desinstale o Waze oficial antes (passo 3). |
 | `INSTALL_FAILED_INSUFFICIENT_STORAGE` | Libere espaço no celular. |
 | O Tripper não é encontrado | Desligue e ligue a ignição de novo com o Waze aberto. |
+| Conectado, mas o Tripper não mostra nada durante a rota | Abra o painel e veja a linha abaixo do nome do Tripper. Verde: o Waze está mandando dados de navegação. Laranja: ainda nenhum dado do Waze. Vermelho: erro na integração com o Waze; exporte o log do trajeto e abra uma issue. |
 
 Qualquer outra coisa: [abra uma issue](https://github.com/jnsdias/wazetripper/issues). As configurações avançadas
 (versão do Waze, origem do download, idiomas) estão no `.env.example`; você não precisa dele para uma montagem normal.
