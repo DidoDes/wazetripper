@@ -1,9 +1,11 @@
-# Single toolchain image for the whole Waze -> Kawasaki patch pipeline.
+# Single toolchain image for the whole WazeTripper build pipeline.
 # Everything the scripts need runs inside this image; the host only needs Docker.
 #
 #   apktool  d8  zipalign  apksigner  aapt2  apkeep  javac  python3  zip
 #
-# All versions are pinned for reproducible builds.
+# All versions are pinned for reproducible builds, and every third-party download from GitHub is
+# checked against its SHA-256 (a tampered release asset fails the image build). The Android
+# cmdline-tools come from dl.google.com over HTTPS, and sdkmanager verifies what it installs.
 FROM eclipse-temurin:17-jdk-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -32,15 +34,19 @@ RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools \
 
 # --- Apktool (pinned jar + wrapper) ---
 ARG APKTOOL_VERSION=2.10.0
+ARG APKTOOL_SHA256=c0350abbab5314248dfe2ee0c907def4edd14f6faef1f5d372d3d4abd28f0431
 RUN wget -q https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar \
         -O /opt/apktool.jar \
+    && echo "${APKTOOL_SHA256}  /opt/apktool.jar" | sha256sum -c - \
     && printf '#!/bin/sh\nexec java -jar /opt/apktool.jar "$@"\n' > /usr/local/bin/apktool \
     && chmod +x /usr/local/bin/apktool
 
 # --- apkeep (pinned prebuilt EFF binary) ---
 ARG APKEEP_VERSION=1.0.0
+ARG APKEEP_SHA256=a23579a3ba366d25a6d69848189b983d65662f4ecf4b9e11e16510811659de4e
 RUN wget -q https://github.com/EFForg/apkeep/releases/download/${APKEEP_VERSION}/apkeep-x86_64-unknown-linux-gnu \
         -O /usr/local/bin/apkeep \
+    && echo "${APKEEP_SHA256}  /usr/local/bin/apkeep" | sha256sum -c - \
     && chmod +x /usr/local/bin/apkeep
 
 # --- APKEditor (pinned jar): binary split-APK merger (ARSCLib) ---

@@ -4,6 +4,25 @@ Versioning follows [SemVer](https://semver.org) while in `0.x` (anything may cha
 version lives in `src/com/waze/wazetripper/Version.java` and is shown in the app's panel and in the
 header of exported trip logs.
 
+## Unreleased
+
+Added
+- Every build checks that `apk/` is genuine Waze before using it: the base and every split must be signed by Waze's own
+  certificate and the base must be `com.waze` at the pinned version. A tampered or repackaged download from a mirror
+  now stops the build. An optional `WAZE_BASE_SHA256` pins the exact file too.
+- A `WAZE_VERSION` other than the supported 5.23.0.2 now stops the build with a clear message (the patches only fit that
+  release); `WAZETRIPPER_ALLOW_UNSUPPORTED=1` keeps the old behaviour for porting work.
+- The Docker image checks the SHA-256 of apktool and apkeep, like it already did for APKEditor.
+- GitHub Actions CI: packet checks, the Java package compiling against android-34, Python syntax and ShellCheck.
+
+Changed
+- Automatic reconnection looks only for the paired Tripper's Bluetooth address instead of any `RE_DISP`, so it never
+  connects to another bike's Tripper nearby (which then got a PIN request). The scan stays at full speed for the first
+  3 minutes of the 30-minute window, then switches to Android's balanced mode to save battery. Not yet verified on
+  hardware.
+- The keepalive measures idle time with the monotonic clock, so a phone clock change (network time sync, time zone)
+  can no longer delay a keepalive past the Tripper's 5-second watchdog.
+
 ## 0.5.1 — 2026-09-20
 
 Added

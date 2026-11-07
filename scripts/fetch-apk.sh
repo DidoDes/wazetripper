@@ -4,6 +4,7 @@
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 require_image
+require_supported_version
 
 # Skip the (slow) download when the workspace already holds the normalized apks. FORCE=1 re-fetches.
 if [ -z "${FORCE:-}" ] && [ -f "$APK_DIR/base.apk" ] && ls "$APK_DIR"/split_config.*.apk >/dev/null 2>&1; then
@@ -35,6 +36,5 @@ esac
 log "normalizing download into apk/base.apk + apk/split_config.*.apk"
 run_tools python3 scripts/normalize_apks.py
 
-log "verifying identity"
-run_tools aapt2 dump badging "apk/base.apk" | grep -E "^package: name" || true
 ls -1 "$APK_DIR"/base.apk "$APK_DIR"/split_*.apk
+verify_waze_apks

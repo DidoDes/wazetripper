@@ -87,11 +87,16 @@ final class TripperBridge {
     // Reconexao automatica (ver armAuto/autoAttempt)
     private static final long AUTO_INTERVAL_MS = 30_000L;
     private static final long AUTO_WINDOW_MS = 30 * 60_000L;
+    // Nos primeiros minutos da janela (o caso comum: abriu o Waze e ligou a moto) o scan roda em
+    // LOW_LATENCY; depois cai pra BALANCED (~25% do radio), que ainda pega o anuncio de <30 s do
+    // Pod, mas sem gastar bateria a toda durante meia hora.
+    private static final long AUTO_FAST_MS = 3 * 60_000L;
     private static final long AUTO_AFTER_DROP_MS = 5_000L;
     private static final long AUTO_AFTER_TRIPPER_DROP_MS = 1_000L; // queda iniciada pelo Tripper: ele anuncia de novo na hora
     private final Runnable autoTick = this::autoAttempt;
     private volatile boolean userStopped;   // o usuario tocou em Desconectar/Cancelar: nao procura mais sozinho
     private boolean autoStartedOnce;
+    private boolean autoSlowLogged;         // ja logou a troca do scan pra BALANCED nesta janela
     private long autoDeadline;              // elapsedRealtime em que a janela de 30 min acaba
     private boolean autoLogged;             // 1 linha de log por janela, nao uma a cada 30 s
     private boolean autoGaveUp;
@@ -102,7 +107,7 @@ final class TripperBridge {
 
     private final ArrayDeque<byte[]> sendQueue = new ArrayDeque<>();
     private boolean writePending;
-    private long lastSendMillis;
+    private long lastSendMillis; // SystemClock.elapsedRealtime(): monotono, imune a ajuste de hora
     private Runnable keepAliveRunnable;
 
     private TripperBridge(Context appCtx) {
@@ -224,6 +229,7 @@ final class TripperBridge {
         autoDeadline = SystemClock.elapsedRealtime() + AUTO_WINDOW_MS;
         autoLogged = false;
         autoBtOffLogged = false;
+        autoSlowLogged = false;
         autoGaveUp = false;
         main.postDelayed(autoTick, delayMs);
     }
@@ -528,15 +534,33 @@ final class TripperBridge {
             return;
         }
 
-        ScanFilter filter = new ScanFilter.Builder().setDeviceName(DEVICE_NAME).build();
+        // Reconexao automatica: filtra pelo endereco do Pod pareado, nao so' pelo nome. Com o filtro
+        // por nome, o Pod de outra moto por perto (encontro, semaforo) seria conectado e receberia o
+        // SHOW PIN. O filtro por endereco tambem roda no chip Bluetooth, gastando menos bateria.
+        String pairedMac = auto ? TripperPrefs.pairedMac(appContext) : null;
+        ScanFilter.Builder fb = new ScanFilter.Builder();
+        if (pairedMac != null && android.bluetooth.BluetoothAdapter.checkBluetoothAddress(pairedMac)) {
+            fb.setDeviceAddress(pairedMac);
+        } else {
+            fb.setDeviceName(DEVICE_NAME);
+        }
+        ScanFilter filter = fb.build();
+        long windowElapsed = AUTO_WINDOW_MS - (autoDeadline - SystemClock.elapsedRealtime());
+        int scanMode = (auto && windowElapsed > AUTO_FAST_MS)
+                ? ScanSettings.SCAN_MODE_BALANCED
+                : ScanSettings.SCAN_MODE_LOW_LATENCY;
         ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setScanMode(scanMode)
                 .build();
 
         scanning = true;
         autoScan = auto;
         setState(State.SCANNING);
         if (!auto) log("Iniciando scan por \"" + DEVICE_NAME + "\"...");
+        else if (scanMode == ScanSettings.SCAN_MODE_BALANCED && !autoSlowLogged) {
+            autoSlowLogged = true;
+            log("Reconexao automatica: scan em modo economico (BALANCED) pelo resto da janela.");
+        }
 
         scanner.startScan(Collections.singletonList(filter), settings, scanCallback);
 
@@ -731,7 +755,7 @@ final class TripperBridge {
             @Override
             public void run() {
                 if (bluetoothGatt == null) return;
-                long idleMs = System.currentTimeMillis() - lastSendMillis;
+                long idleMs = SystemClock.elapsedRealtime() - lastSendMillis;
                 if (idleMs >= 2000) {
                     // Com ligacao ativa o keepalive reenvia o icone dela (como outro app do Tripper).
                     enqueuePacket(callActive ? TripperProtocol.buildCallIconPacket() : TripperProtocol.PING_FW);
@@ -777,7 +801,7 @@ final class TripperBridge {
         if (bytes == null) return;
 
         writePending = true;
-        lastSendMillis = System.currentTimeMillis();
+        lastSendMillis = SystemClock.elapsedRealtime();
         log("TX: " + TripperProtocol.toHexString(bytes));
         boolean ok;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
