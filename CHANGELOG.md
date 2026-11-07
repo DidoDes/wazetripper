@@ -4,7 +4,7 @@ Versioning follows [SemVer](https://semver.org) while in `0.x` (anything may cha
 version lives in `src/com/waze/wazetripper/Version.java` and is shown in the app's panel and in the
 header of exported trip logs.
 
-## Unreleased
+## 0.6.0-beta — unreleased (test build)
 
 Added
 - Every build checks that `apk/` is genuine Waze before using it: the base and every split must be signed by Waze's own
